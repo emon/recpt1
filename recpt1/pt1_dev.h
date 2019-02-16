@@ -3,32 +3,44 @@
 #define _PT1_DEV_H_
 
 char *bsdev[NUM_BSDEV] = {
-    "/dev/pt1video1",
-    "/dev/pt1video0",
-    "/dev/pt1video5",
-    "/dev/pt1video4",
-    "/dev/pt1video9",
-    "/dev/pt1video8",
-    "/dev/pt1video13",
-    "/dev/pt1video12",
-    "/dev/pt3video1",
-    "/dev/pt3video0",
-    "/dev/pt3video5",
-    "/dev/pt3video4"
+    "/dev/ptx0.s0",
+    "/dev/ptx0.s1",
+    "/dev/ptx1.s0",
+    "/dev/ptx1.s1",
+    "/dev/ptx2.s0",
+    "/dev/ptx2.s1"
 };
 char *isdb_t_dev[NUM_ISDB_T_DEV] = {
-    "/dev/pt1video2",
-    "/dev/pt1video3",
-    "/dev/pt1video6",
-    "/dev/pt1video7",
-    "/dev/pt1video10",
-    "/dev/pt1video11",
-    "/dev/pt1video14",
-    "/dev/pt1video15",
-    "/dev/pt3video2",
-    "/dev/pt3video3",
-    "/dev/pt3video6",
-    "/dev/pt3video7"
+    "/dev/ptx0.t0",
+    "/dev/ptx0.t1",
+    "/dev/ptx1.t0",
+    "/dev/ptx1.t1",
+    "/dev/ptx2.t0",
+    "/dev/ptx2.t1"
+};
+char *bsmib[NUM_BSDEV] = {
+    "dev.ptx.0.s0",
+    "dev.ptx.0.s1",
+    "dev.ptx.1.s0",
+    "dev.ptx.1.s1",
+    "dev.ptx.2.s0",
+    "dev.ptx.2.s1"
+};
+char *isdb_t_mib[NUM_ISDB_T_DEV] = {
+    "dev.ptx.0.t0",
+    "dev.ptx.0.t1",
+    "dev.ptx.1.t0",
+    "dev.ptx.1.t1",
+    "dev.ptx.2.t0",
+    "dev.ptx.2.t1"
+};
+char *lnb_mib[NUM_BSDEV] = {
+    "dev.ptx.0.lnb",
+    "dev.ptx.0.lnb",
+    "dev.ptx.1.lnb",
+    "dev.ptx.1.lnb",
+    "dev.ptx.2.lnb",
+    "dev.ptx.2.lnb"
 };
 
 // 変換テーブル(ISDB-T用)

@@ -74,6 +74,7 @@ mq_recv(void *t)
     thread_data *tdata = (thread_data *)t;
     message_buf rbuf;
     char channel[16];
+    char mib[32];
     char service_id[32] = {0};
     int recsec = 0, time_to_add = 0;
 
@@ -94,7 +95,7 @@ mq_recv(void *t)
             tdata->table = table;
 
             /* stop stream */
-            ioctl(tdata->tfd, STOP_REC, 0);
+//          ioctl(tdata->tfd, STOP_REC, 0);
 
             /* wait for remainder */
             while(tdata->queue->num_used > 0) {
@@ -113,17 +114,39 @@ mq_recv(void *t)
                   .frequencyno = tdata->table->set_freq,
                   .slot = tdata->table->add_freq,
                 };
-                if(ioctl(tdata->tfd, SET_CHANNEL, &freq) < 0) {
-                    fprintf(stderr, "Cannot tune to the specified channel\n");
-                    goto CHECK_TIME_TO_ADD;
+//              if(ioctl(tdata->tfd, SET_CHANNEL, &freq) < 0) {
+//                  fprintf(stderr, "Cannot tune to the specified channel\n");
+//                  goto CHECK_TIME_TO_ADD;
+//              }
+                if (tdata->table->type == CHTYPE_SATELLITE) {
+                    if (sysctlbyname(lnb_mib[tdata->dev_num], NULL, NULL, &tdata->lnb, sizeof(tdata->lnb)) < 0) {
+                        fprintf(stderr, "Power on LNB failed\n");
+                        goto CHECK_TIME_TO_ADD;
+                    }
+                    /* tune to specified channel */
+                    sprintf(mib, "%s.freq", bsmib[tdata->dev_num]);
+                    if (sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0) {
+                        close(tdata->tfd);
+                        fprintf(stderr, "Cannot tune to the specified channel\n");
+                        goto CHECK_TIME_TO_ADD;
+                    }
+                } else {
+                    /* tune to specified channel */
+                    sprintf(mib, "%s.freq", isdb_t_mib[tdata->dev_num]);
+                    if (sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0) {
+                        close(tdata->tfd);
+                        fprintf(stderr, "Cannot tune to the specified channel\n");
+                        goto CHECK_TIME_TO_ADD;
+                    }
                 }
-                calc_cn(tdata->tfd, tdata->table->type, FALSE);
+
+                calc_cn(tdata->tfd, tdata->table->type, tdata->dev_num, FALSE);
             }
             /* restart recording */
-            if(ioctl(tdata->tfd, START_REC, 0) < 0) {
-                fprintf(stderr, "Tuner cannot start recording\n");
-                return NULL;
-            }
+//          if(ioctl(tdata->tfd, START_REC, 0) < 0) {
+//              fprintf(stderr, "Tuner cannot start recording\n");
+//              return NULL;
+//          }
         }
 
 CHECK_TIME_TO_ADD:
@@ -539,7 +562,7 @@ void
 cleanup(thread_data *tdata)
 {
     /* stop recording */
-    ioctl(tdata->tfd, STOP_REC, 0);
+//  ioctl(tdata->tfd, STOP_REC, 0);
 
     f_exit = TRUE;
 
@@ -980,10 +1003,10 @@ main(int argc, char **argv)
         pthread_create(&ipc_thread, NULL, mq_recv, &tdata);
 
         /* start recording */
-        if(ioctl(tdata.tfd, START_REC, 0) < 0) {
-            fprintf(stderr, "Tuner cannot start recording\n");
-            return 1;
-        }
+//      if(ioctl(tdata.tfd, START_REC, 0) < 0) {
+//          fprintf(stderr, "Tuner cannot start recording\n");
+//          return 1;
+//      }
 
         fprintf(stderr, "\nRecording...\n");
 
@@ -1017,22 +1040,36 @@ main(int argc, char **argv)
             /* stop recording */
             time(&cur_time);
             if((cur_time - tdata.start_time) >= tdata.recsec && !tdata.indefinite) {
-                ioctl(tdata.tfd, STOP_REC, 0);
-                /* read remaining data */
-                while(1) {
-                    bufptr = malloc(sizeof(BUFSZ));
-                    if(!bufptr) {
-                        f_exit = TRUE;
-                        break;
-                    }
-                    bufptr->size = read(tdata.tfd, bufptr->buffer, MAX_READ_SIZE);
-                    if(bufptr->size <= 0) {
-                        f_exit = TRUE;
-                        enqueue(p_queue, NULL);
-                        break;
-                    }
-                    enqueue(p_queue, bufptr);
+//              ioctl(tdata.tfd, STOP_REC, 0);
+//              /* read remaining data */
+//              while(1) {
+//                  bufptr = malloc(sizeof(BUFSZ));
+//                  if(!bufptr) {
+//                      f_exit = TRUE;
+//                      break;
+//                  }
+//                  bufptr->size = read(tdata.tfd, bufptr->buffer, MAX_READ_SIZE);
+//                  if(bufptr->size <= 0) {
+//                      f_exit = TRUE;
+//                      enqueue(p_queue, NULL);
+//                      break;
+//                  }
+//                  enqueue(p_queue, bufptr);
+//              }
+                bufptr = malloc(sizeof(BUFSZ));
+                if(!bufptr) {
+                    f_exit = TRUE;
+                    break;
                 }
+                bufptr->size = read(tdata.tfd, bufptr->buffer, MAX_READ_SIZE);
+                if(bufptr->size <= 0) {
+                    f_exit = TRUE;
+                    enqueue(p_queue, NULL);
+                    break;
+                }
+                enqueue(p_queue, bufptr);
+                f_exit = TRUE;
+                enqueue(p_queue, NULL);
                 break;
             }
         }

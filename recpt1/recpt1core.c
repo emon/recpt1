@@ -83,7 +83,7 @@ close_tuner(thread_data *tdata)
         return rv;
 
     if(tdata->table->type == CHTYPE_SATELLITE) {
-        if(ioctl(tdata->tfd, LNB_DISABLE, 0) < 0) {
+        if(sysctlbyname(lnb_mib[tdata->dev_num], NULL, NULL, 0, sizeof(int)) < 0) {
             rv = 1;
         }
     }
@@ -139,14 +139,23 @@ getsignal_isdb_s(int signal)
 }
 
 void
-calc_cn(int fd, int type, boolean use_bell)
+calc_cn(int fd, int type, int dev_num, boolean use_bell)
 {
     int     rc;
     double  P;
     double  CNR;
     int bell = 0;
+    char mib[32];
+    size_t len = sizeof(rc);
 
-    if(ioctl(fd, GET_SIGNAL_STRENGTH, &rc) < 0) {
+    if (type == CHTYPE_GROUND) {
+      sprintf(mib, "%s.signal", isdb_t_mib[dev_num]);
+    }
+    else {
+      sprintf(mib, "%s.signal", bsmib[dev_num]);
+    }
+    
+    if(sysctlbyname(mib, &rc, &len, NULL, 0) < 0) {
         fprintf(stderr, "Tuner Select Error\n");
         return ;
     }
@@ -373,6 +382,40 @@ do_bell(int bell)
     }
 }
 
+/* from recpt1.diff  http://www.castanet.live-on.net/~tos/wiki/  "FreeBSDで地デジビデオサーバ" */
+int
+_opendev(char *device, thread_data *tdata)
+{
+    int dev_num = 0;
+    int flag = 0;
+
+    /* search deviece */
+    if (tdata->table->type == CHTYPE_SATELLITE) {
+        for (dev_num = 0; NUM_BSDEV > dev_num; dev_num++) {
+            if (0 == strcmp(bsdev[dev_num], device)) {
+                flag = 1;
+                tdata->dev_num = dev_num;
+                break;
+            }
+        }
+    }
+    else {
+        for (dev_num = 0; NUM_ISDB_T_DEV > dev_num; dev_num++) {
+            if (0 == strcmp(isdb_t_dev[dev_num], device)) {
+                flag = 1;
+                tdata->dev_num = dev_num;
+                break;
+            }
+        }
+    }
+    if (0 == flag) {
+        return -1;
+    }
+
+    tdata->tfd = open(device, O_RDONLY);
+    return tdata->tfd;
+}
+
 /* from checksignal.c */
 int
 tune(char *channel, thread_data *tdata, char *device)
@@ -381,6 +424,7 @@ tune(char *channel, thread_data *tdata, char *device)
     int num_devs;
     int lp;
     FREQUENCY freq;
+    char mib[32];
 
     /* get channel */
     tdata->table = searchrecoff(channel);
@@ -395,33 +439,29 @@ tune(char *channel, thread_data *tdata, char *device)
     /* open tuner */
     /* case 1: specified tuner device */
     if(device) {
-        tdata->tfd = open(device, O_RDONLY);
-        if(tdata->tfd < 0) {
+        if (_opendev(device, tdata) < 0) {
             fprintf(stderr, "Cannot open tuner device: %s\n", device);
             return 1;
         }
 
         /* power on LNB */
         if(tdata->table->type == CHTYPE_SATELLITE) {
-            if(ioctl(tdata->tfd, LNB_ENABLE, tdata->lnb) < 0) {
+            if(sysctlbyname(lnb_mib[tdata->dev_num], NULL, NULL, &tdata->lnb, sizeof(tdata->lnb)) < 0) {
                 fprintf(stderr, "Power on LNB failed: %s\n", device);
             }
+            sprintf(mib, "%s.freq", bsmib[tdata->dev_num]);
+        }
+        else {
+                sprintf(mib, "%s.freq", isdb_t_mib[tdata->dev_num]);
         }
 
         /* tune to specified channel */
-        while(ioctl(tdata->tfd, SET_CHANNEL, &freq) < 0) {
-            if(tdata->tune_persistent) {
-                if(f_exit) {
-                    close_tuner(tdata);
-                    return 1;
-                }
-                fprintf(stderr, "No signal. Still trying: %s\n", device);
-            }
-            else {
-                close(tdata->tfd);
-                fprintf(stderr, "Cannot tune to the specified channel: %s\n", device);
+        while (sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0) {
+            if(f_exit) {
+                close_tuner(tdata);
                 return 1;
             }
+            fprintf(stderr, "No signal. Still trying: %s\n", device);
         }
 
         fprintf(stderr, "device = %s\n", device);
@@ -444,14 +484,18 @@ tune(char *channel, thread_data *tdata, char *device)
             if(tdata->tfd >= 0) {
                 /* power on LNB */
                 if(tdata->table->type == CHTYPE_SATELLITE) {
-                    if(ioctl(tdata->tfd, LNB_ENABLE, tdata->lnb) < 0) {
+                    if(sysctlbyname(lnb_mib[lp], NULL, NULL, &tdata->lnb, sizeof(tdata->lnb)) < 0) {
                         fprintf(stderr, "Warning: Power on LNB failed: %s\n", tuner[lp]);
                     }
+                    sprintf(mib, "%s.freq", bsmib[lp]);
+                }
+                else {
+                    sprintf(mib, "%s.freq", isdb_t_mib[lp]);
                 }
 
                 /* tune to specified channel */
                 if(tdata->tune_persistent) {
-                    while(ioctl(tdata->tfd, SET_CHANNEL, &freq) < 0 &&
+                    while(sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0 &&
                           count < MAX_RETRY) {
                         if(f_exit) {
                             close_tuner(tdata);
@@ -468,7 +512,7 @@ tune(char *channel, thread_data *tdata, char *device)
                     }
                 } /* tune_persistent */
                 else {
-                    if(ioctl(tdata->tfd, SET_CHANNEL, &freq) < 0) {
+                    if(sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0) {
                         close(tdata->tfd);
                         tdata->tfd = -1;
                         continue;
@@ -490,7 +534,7 @@ tune(char *channel, thread_data *tdata, char *device)
 
     if(!tdata->tune_persistent) {
         /* show signal strength */
-        calc_cn(tdata->tfd, tdata->table->type, FALSE);
+        calc_cn(tdata->tfd, tdata->table->type, tdata->dev_num, FALSE);
     }
 
     return 0; /* success */
@@ -506,6 +550,7 @@ tune(char *channel, thread_data *tdata, char *device)
     int num_devs;
     int lp;
     FREQUENCY freq;
+    char mib[32];
 
     /* get channel */
     tdata->table = searchrecoff(channel);
@@ -520,24 +565,32 @@ tune(char *channel, thread_data *tdata, char *device)
     /* open tuner */
     /* case 1: specified tuner device */
     if(device) {
-        tdata->tfd = open(device, O_RDONLY);
-        if(tdata->tfd < 0) {
+        if (_opendev(device, tdata) < 0) {
             fprintf(stderr, "Cannot open tuner device: %s\n", device);
             return 1;
         }
 
         /* power on LNB */
-        if(tdata->table->type == CHTYPE_SATELLITE) {
-            if(ioctl(tdata->tfd, LNB_ENABLE, tdata->lnb) < 0) {
+        if (tdata->table->type == CHTYPE_SATELLITE) {
+            if (sysctlbyname(lnb_mib[tdata->dev_num], NULL, NULL, &tdata->lnb, sizeof(tdata->lnb)) < 0) {
                 fprintf(stderr, "Power on LNB failed: %s\n", device);
             }
+            /* tune to specified channel */
+            sprintf(mib, "%s.freq", bsmib[tdata->dev_num]);
+            if (sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0) {
+                close(tdata->tfd);
+                fprintf(stderr, "Cannot tune to the specified channel: %s\n", device);
+                return 1;
+            }
         }
-
-        /* tune to specified channel */
-        if(ioctl(tdata->tfd, SET_CHANNEL, &freq) < 0) {
-            close(tdata->tfd);
-            fprintf(stderr, "Cannot tune to the specified channel: %s\n", device);
-            return 1;
+        else {
+            /* tune to specified channel */
+            sprintf(mib, "%s.freq", isdb_t_mib[tdata->dev_num]);
+            if (sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0) {
+                close(tdata->tfd);
+                fprintf(stderr, "Cannot tune to the specified channel: %s\n", device);
+                return 1;
+            }
         }
     }
     else {
@@ -556,13 +609,17 @@ tune(char *channel, thread_data *tdata, char *device)
             if(tdata->tfd >= 0) {
                 /* power on LNB */
                 if(tdata->table->type == CHTYPE_SATELLITE) {
-                    if(ioctl(tdata->tfd, LNB_ENABLE, tdata->lnb) < 0) {
+                    if(sysctlbyname(lnb_mib[lp], NULL, NULL, &tdata->lnb, sizeof(tdata->lnb)) < 0) {
                         fprintf(stderr, "Warning: Power on LNB failed: %s\n", tuner[lp]);
                     }
+                    sprintf(mib, "%s.freq", bsmib[lp]);
+                }
+                else {
+                    sprintf(mib, "%s.freq", isdb_t_mib[lp]);
                 }
 
                 /* tune to specified channel */
-                if(ioctl(tdata->tfd, SET_CHANNEL, &freq) < 0) {
+                if (sysctlbyname(mib, NULL, NULL, &freq, sizeof(freq)) < 0) {
                     close(tdata->tfd);
                     tdata->tfd = -1;
                     continue;
@@ -580,7 +637,7 @@ tune(char *channel, thread_data *tdata, char *device)
     }
 
     /* show signal strength */
-    calc_cn(tdata->tfd, tdata->table->type, FALSE);
+    calc_cn(tdata->tfd, tdata->table->type, tdata->dev_num, FALSE);
 
     return 0; /* success */
 }

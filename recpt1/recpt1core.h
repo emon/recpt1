@@ -35,6 +35,7 @@
 #include "recpt1.h"
 #include "mkpath.h"
 #include "tssplitter_lite.h"
+#include <sys/sysctl.h>
 
 /* ipc message size */
 #define MSGSZ     255
@@ -57,7 +58,7 @@ typedef struct {
 
 typedef struct {
     int tfd;    /* tuner fd */ //xxx variable
-
+    int dev_num;
     int wfd;    /* output file fd */ //invariable
     int lnb;    /* LNB voltage */ //invariable
     int msqid; //invariable
@@ -80,6 +81,9 @@ typedef struct {
 extern const char *version;
 extern char *bsdev[];
 extern char *isdb_t_dev[];
+extern char *bsmib[];
+extern char *isdb_t_mib[];
+extern char *lnb_mib[];
 
 extern boolean f_exit;
 
@@ -88,7 +92,7 @@ int tune(char *channel, thread_data *tdata, char *device);
 int close_tuner(thread_data *tdata);
 void show_channels(void);
 ISDB_T_FREQ_CONV_TABLE *searchrecoff(char *channel);
-void calc_cn(int fd, int type, boolean use_bell);
+void calc_cn(int fd, int type, int dev_num, boolean use_bell);
 int parse_time(char *rectimestr, int *recsec);
 void do_bell(int bell);
 

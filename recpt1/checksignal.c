@@ -199,7 +199,7 @@ main(int argc, char **argv)
         if(f_exit)
             break;
         /* show signal strength */
-        calc_cn(tdata.tfd, tdata.table->type, use_bell);
+        calc_cn(tdata.tfd, tdata.table->type, tdata.dev_num, use_bell);
         sleep(1);
     }
 
