@@ -5,10 +5,10 @@
 #include <stdint.h>
 #include "config.h"
 
-#ifdef HAVE_LIBARIB25
+#ifdef HAVE_LIBAB25
 
-#include <arib25/arib_std_b25.h>
-#include <arib25/b_cas_card.h>
+#include <ab25/arib_std_b25.h>
+#include <ab25/b_cas_card.h>
 
 typedef struct {
     ARIB_STD_B25 *b25;
